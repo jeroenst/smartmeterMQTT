@@ -109,7 +109,7 @@ while(1)
 			$mqtt->publish($mqttTopicPrefix."electricity/kwh_used1", $data['electricitymeter']['total']['kwh_used1'],0,1);
 			$mqtt->publish($mqttTopicPrefix."electricity/kwh_used2", $data['electricitymeter']['total']['kwh_used2'],0,1);
 			$mqtt->publish($mqttTopicPrefix."electricity/kwh_provided1", $data['electricitymeter']['total']['kwh_provided1'],0,1);
-			$mqtt->publish($mqttTopicPrefix."electricity/kwh_provided1", $data['electricitymeter']['total']['kwh_provided1'],0,1);
+			$mqtt->publish($mqttTopicPrefix."electricity/kwh_provided2", $data['electricitymeter']['total']['kwh_provided2'],0,1);
 			$mqtt->publish($mqttTopicPrefix."electricity/kw_using", $data['electricitymeter']['now']['kw_using'],0,1);
 			$mqtt->publish($mqttTopicPrefix."electricity/kw_providing", $data['electricitymeter']['now']['kw_providing'],0,1);
 			$mqtt->publish($mqttTopicPrefix."gas/m3", $data['gasmeter']['total']['m3'],0,1);
