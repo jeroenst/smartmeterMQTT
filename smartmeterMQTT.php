@@ -109,14 +109,14 @@ while(1)
 							break;
 							case "0-1:24.2.1":
 							        preg_match("'\((.*)\*'si", $value[1], $valuegas);
-								publishmqtt("gas/m3", extractvalue($value[1]));
+								publishmqtt("gas/m3", $valuegas[1]);
 
 								preg_match("'(..)(..)(..)(..)(..)(..)W'", $value[1], $gasdatetime);
 								$gasdatetime = '20' . $gasdatetime[1] . '-' . $gasdatetime[2] . '-' . $gasdatetime[3] . ' ' . $gasdatetime[4] . ':' . $gasdatetime[5] . ':' . $gasdatetime[6];
 								publishmqtt("gas/datetime", $gasdatetime);
 							break;
 						}
-						if($label[1] == "1-0:1.7.0") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kw_using", extractvalue($value[1]),0,1);
+/*						if($label[1] == "1-0:1.7.0") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kw_using", extractvalue($value[1]),0,1);
 						if($label[1] == "1-0:2.7.0") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kw_providing", extractvalue($value[1]),0,1);
 						if($label[1] == "1-0:1.8.1") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kwh_used1", extractvalue($value[1]),0,1);
 						if($label[1] == "1-0:1.8.2") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kwh_used2", extractvalue($value[1]),0,1);
@@ -130,7 +130,7 @@ while(1)
 							preg_match("'(..)(..)(..)(..)(..)(..)W'", $value[1], $gasdatetime);
 							$gasdatetime = '20' . $gasdatetime[1] . '-' . $gasdatetime[2] . '-' . $gasdatetime[3] . ' ' . $gasdatetime[4] . ':' . $gasdatetime[5] . ':' . $gasdatetime[6];    
 							$mqtt->publishwhenchanged($mqttTopicPrefix."gas/datetime", $gasdatetime,0,1);
-						}
+						}*/
 					}
 				}
 			}
