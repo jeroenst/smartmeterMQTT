@@ -64,72 +64,95 @@ if ( $serial->deviceSet($serialdevice))
 while(1)
 {
 	try {
-		// read from serial port
-		$packetcomplete = false;
-		$read = $serial->readPort();
-		$receivedpacket = $receivedpacket . $read;   
-		if ($read) echo "Received from serial port: ".$read; 
-		if (strlen ($read) == 0 && strpos($receivedpacket, '!') && strpos($receivedpacket, 'KFM5'))
-		{
-			foreach(preg_split("/((\r?\n)|(\r\n?))/", $receivedpacket) as $line)
-			{
-				if (strlen($line) > 0)
+		$readmask = array();
+		$writemask = array();
+		$errormask = array();
+		array_push($readmask, $serial->_dHandle);
+		$nroffd = stream_select($readmask, $writemask, $errormask, 1);
+	        foreach ($readmask as $i)
+	        {
+	        	if ($i == $serial->_dHandle)
+	        	{
+	        		// read from serial port
+				$packetcomplete = false;
+				$read = $serial->readPort();
+				$receivedpacket = $receivedpacket . $read;   
+				if ($read) echo "Received from serial port: ".$read; 
+				while (strpos($receivedpacket, "\n") !== false)
 				{
+					$line = strtok($receivedpacket, "\n");
+					$receivedpacket = substr($receivedpacket, strlen($line)+1); 
 					preg_match("'\((.*)\)'si", $line, $value);
 					preg_match("'(.*?)\('si", $line, $label);
 					if (isset($label[1]) && isset($value[1]))
 					{
 						echo ("label=".$label[1]." value=".$value[1]."\n"); 
-						if($label[1] == "1-0:1.7.0") $data['electricitymeter']['now']['kw_using'] = extractvalue($value[1]);
-						if($label[1] == "1-0:2.7.0") $data['electricitymeter']['now']['kw_providing'] = extractvalue($value[1]);
-						if($label[1] == "1-0:1.8.1") $data['electricitymeter']['total']['kwh_used1'] = extractvalue($value[1]);
-						if($label[1] == "1-0:1.8.2") $data['electricitymeter']['total']['kwh_used2'] = extractvalue($value[1]);
-						if($label[1] == "1-0:2.8.1") $data['electricitymeter']['total']['kwh_provided1'] = extractvalue($value[1]);
-						if($label[1] == "1-0:2.8.2") $data['electricitymeter']['total']['kwh_provided2'] = extractvalue($value[1]);
+						switch ($label[1])
+						{
+							case "1-0:1.7.0":
+								publishmqtt("electricity/kw_using", extractvalue($value[1]));
+							break;
+							case "1-0:2.7.0":
+								publishmqtt("electricity/kw_providing", extractvalue($value[1]));
+							break;
+							case "1-0:1.8.1":
+								publishmqtt("electricity/kwh_used1", extractvalue($value[1]));
+							break;
+							case  "1-0:1.8.2":
+								publishmqtt("electricity/kwh_used2", extractvalue($value[1]));
+							break;
+							case "1-0:2.8.1":
+								publishmqtt("electricity/kwh_provided1", extractvalue($value[1]));
+							break;
+							case "1-0:2.8.2":
+								publishmqtt("electricity/kwh_provided2", extractvalue($value[1]));
+							break;
+							case "0-1:24.2.1":
+							        preg_match("'\((.*)\*'si", $value[1], $valuegas);
+								publishmqtt("gas/m3", extractvalue($value[1]));
+
+								preg_match("'(..)(..)(..)(..)(..)(..)W'", $value[1], $gasdatetime);
+								$gasdatetime = '20' . $gasdatetime[1] . '-' . $gasdatetime[2] . '-' . $gasdatetime[3] . ' ' . $gasdatetime[4] . ':' . $gasdatetime[5] . ':' . $gasdatetime[6];
+								publishmqtt("gas/datetime", $gasdatetime);
+							break;
+						}
+						if($label[1] == "1-0:1.7.0") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kw_using", extractvalue($value[1]),0,1);
+						if($label[1] == "1-0:2.7.0") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kw_providing", extractvalue($value[1]),0,1);
+						if($label[1] == "1-0:1.8.1") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kwh_used1", extractvalue($value[1]),0,1);
+						if($label[1] == "1-0:1.8.2") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kwh_used2", extractvalue($value[1]),0,1);
+						if($label[1] == "1-0:2.8.1") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kwh_provided1", extractvalue($value[1]),0,1);
+						if($label[1] == "1-0:2.8.2") $mqtt->publishwhenchanged($mqttTopicPrefix."electricity/kwh_provided2", extractvalue($value[1]),0,1);
 						if($label[1] == "0-1:24.2.1") 
 						{
 							preg_match("'\((.*)\*'si", $value[1], $valuegas);
-							$data['gasmeter']['total']['m3'] = extractvalue($valuegas[1]);
+							$mqtt->publishwhenchanged($mqttTopicPrefix."gas/m3", extractvalue($value[1]),0,1);
 							
 							preg_match("'(..)(..)(..)(..)(..)(..)W'", $value[1], $gasdatetime);
-							$data['gasmeter']['updatedatetime'] = '20' . $gasdatetime[1] . '-' . $gasdatetime[2] . '-' . $gasdatetime[3] . ' ' . $gasdatetime[4] . ':' . $gasdatetime[5] . ':' . $gasdatetime[6];    
+							$gasdatetime = '20' . $gasdatetime[1] . '-' . $gasdatetime[2] . '-' . $gasdatetime[3] . ' ' . $gasdatetime[4] . ':' . $gasdatetime[5] . ':' . $gasdatetime[6];    
+							$mqtt->publishwhenchanged($mqttTopicPrefix."gas/datetime", $gasdatetime,0,1);
 						}
 					}
 				}
 			}
-			echo 	"\ngas_used=".$data['gasmeter']['total']['m3'].
-				"\ngas_datetime=".$data['gasmeter']['updatedatetime'].
-				"\nkwh_used1=".$data['electricitymeter']['total']['kwh_used1'].
-				"\nkwh_used2=".$data['electricitymeter']['total']['kwh_used2'].
-				"\nkwh_provided1=".$data['electricitymeter']['total']['kwh_provided1'].
-				"\nkwh_provided2=".$data['electricitymeter']['total']['kwh_provided2'].
-				"\nkw_using=".$data['electricitymeter']['now']['kw_using'].
-				"\nkw_providing=".$data['electricitymeter']['now']['kw_providing']."\n";
-			
-			$mqtt->publish($mqttTopicPrefix."electricity/kwh_used1", $data['electricitymeter']['total']['kwh_used1'],0,1);
-			$mqtt->publish($mqttTopicPrefix."electricity/kwh_used2", $data['electricitymeter']['total']['kwh_used2'],0,1);
-			$mqtt->publish($mqttTopicPrefix."electricity/kwh_provided1", $data['electricitymeter']['total']['kwh_provided1'],0,1);
-			$mqtt->publish($mqttTopicPrefix."electricity/kwh_provided2", $data['electricitymeter']['total']['kwh_provided2'],0,1);
-			$mqtt->publish($mqttTopicPrefix."electricity/kw_using", $data['electricitymeter']['now']['kw_using'],0,1);
-			$mqtt->publish($mqttTopicPrefix."electricity/kw_providing", $data['electricitymeter']['now']['kw_providing'],0,1);
-			$mqtt->publish($mqttTopicPrefix."gas/m3", $data['gasmeter']['total']['m3'],0,1);
-			$mqtt->publish($mqttTopicPrefix."gas/updatetime", $data['gasmeter']['updatedatetime'],0,1);
-			$mqtt->publish($mqttTopicPrefix."ready", 1, 0, 1); 
-			
-			$receivedpacket = ''; 
-						
 		}
 	}
 	catch (Exception $e)
 	{
 		echo "Error thrown, restarting program\n";
 	}
-	sleep(1);
 }
 
 // If you want to change the configuration, the device must be closed
 $serial->deviceClose();
 exit(1);
+
+function publishmqtt ($topic, $msg)
+{
+	global $mqtt;
+	global $mqttTopicPrefix;
+	echo ($topic.": ".$msg."\n");
+	$mqtt->publishwhenchanged($mqttTopicPrefix.$topic,$msg,0,1);
+}
 
 function extractvalue($string)
 {
