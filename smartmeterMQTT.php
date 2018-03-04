@@ -24,8 +24,19 @@ if (($tmp = $iniarray["smartmeter"]["mqttpassword"]) != "") $password = $tmp;
 
 
 $mqtt = new phpMQTT($server, $port, $client_id);
-$mqtt->connect(true, NULL, $username, $password);
 
+
+$will = array (
+	["topic"] => $mqttTopicPrefix."status",
+	["content"] => "offline",
+	["qos"] => 0,
+	["retain"] => 1
+);
+
+$mqtt->connect(true, $will, $username, $password);
+publishmqtt("status","online" ,0,1);
+
+$mqttdata = array();
 
 echo "Setting Serial Port Device ".$serialdevice."...\n"; 
 
@@ -69,6 +80,9 @@ while(1)
 		$errormask = array();
 		array_push($readmask, $serial->_dHandle);
 		$nroffd = stream_select($readmask, $writemask, $errormask, 1);
+		
+		$mqtt->proc();
+
 	        foreach ($readmask as $i)
 	        {
 	        	if ($i == $serial->_dHandle)
@@ -84,6 +98,15 @@ while(1)
 					$receivedpacket = substr($receivedpacket, strlen($line)+1); 
 					preg_match("'\((.*)\)'si", $line, $value);
 					preg_match("'(.*?)\('si", $line, $label);
+					if ((strpos($line, "!") !== false) && (strpos($receivedpacket, "!") == 0))
+					{
+						publishmqtt("electricity/watt", ($mqttdata["electricity/kw_using"] - $mqttdata["electricity/kw_providing"])*1000);
+						publishmqtt("status","ready");
+					}
+					if ((strpos($line, "/") !== false) && (strpos($receivedpacket, "/") == 0))
+					{
+						publishmqtt("status","querying" ,0,1);
+					}
 					if (isset($label[1]) && isset($value[1]))
 					{
 						echo ("label=".$label[1]." value=".$value[1]."\n"); 
@@ -91,6 +114,7 @@ while(1)
 						{
 							case "1-0:1.7.0":
 								publishmqtt("electricity/kw_using", extractvalue($value[1]));
+								  
 							break;
 							case "1-0:2.7.0":
 								publishmqtt("electricity/kw_providing", extractvalue($value[1]));
@@ -135,7 +159,9 @@ function publishmqtt ($topic, $msg)
 {
 	global $mqtt;
 	global $mqttTopicPrefix;
+	global $mqttdata;
 	echo ($topic.": ".$msg."\n");
+	$mqttdata[$topic] = $msg;
 	$mqtt->publishwhenchanged($mqttTopicPrefix.$topic,$msg,0,1);
 }
 
