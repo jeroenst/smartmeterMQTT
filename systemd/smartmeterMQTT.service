@@ -2,9 +2,6 @@
 Description=smartmeter MQTT publisher
 After=network.target auditd.service
 WorkingDirectory=/opt/smartmeterMQTT
-StandardOutput=file:/var/log/smartmeterMQTT.log
-StandardError=file:/var/log/smartmeterMQTT.log
-SyslogIdentifier=smartmeterMQTT
 
 [Service]
 ExecStart=/opt/smartmeterMQTT/smartmeterMQTT.php

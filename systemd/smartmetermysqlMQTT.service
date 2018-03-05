@@ -1,0 +1,13 @@
+[Unit]
+Description=smartmeter mysql MQTT publisher
+After=network.target auditd.service
+WorkingDirectory=/opt/smartmetermysqlMQTT
+
+[Service]
+ExecStart=/opt/smartmeterMQTT/smartmetermysqlMQTT.php
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+Alias=smartmetermysqlMQTT.service
