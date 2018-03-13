@@ -8,7 +8,7 @@ $server = "127.0.0.1";     // change if necessary
 $port = 1883;                     // change if necessary
 $username = "";                   // set your username
 $password = "";                   // set your password
-$client_id = "smartmetermysqlMQTT"; // make sure this is unique for connecting to sever - you could use uniqid()
+$client_id = uniqid("smartmetermysql_"); // make sure this is unique for connecting to sever - you could use uniqid()
 $topicprefix = 'home/smartmeter/';
 
 $settings = array(
@@ -99,9 +99,9 @@ function newvalue($topic, $msg){
                                 $newdata["today"]["kwh_provided"] = round($newdata["today"]["kwh_provided1"] + $newdata["today"]["kwh_provided2"],3);
                                 $newdata["today"]["kwh_total"] = round($newdata["today"]["kwh_used"] - $newdata["today"]["kwh_provided"],3);
                                 
-				$mqtt->publishwhenchanged ($topicprefix."electricity/kwh_used_today", $newdata["today"]["kwh_used"],0,1);
-				$mqtt->publishwhenchanged ($topicprefix."electricity/kwh_provide_today", $newdata["today"]["kwh_provided"],0,1);
-				$mqtt->publishwhenchanged ($topicprefix."electricity/kwh_today", $newdata["today"]["kwh_total"],0,1);
+				$mqtt->publishwhenchanged ($topicprefix."electricity/today/kwh_used", $newdata["today"]["kwh_used"],0,1);
+				$mqtt->publishwhenchanged ($topicprefix."electricity/today/kwh_provided", $newdata["today"]["kwh_provided"],0,1);
+				$mqtt->publishwhenchanged ($topicprefix."electricity/today/kwh", $newdata["today"]["kwh_total"],0,1);
                         }
                         else
                         {
@@ -124,9 +124,9 @@ function newvalue($topic, $msg){
                                         $newdata["yesterday"]["kwh_provided"] = round($newdata["yesterday"]["kwh_provided1"] + $newdata["yesterday"]["kwh_provided2"], 3);
                                         $newdata["yesterday"]["kwh_total"] = round($newdata["yesterday"]["kwh_used"] - $newdata["yesterday"]["kwh_provided"], 3);
                                         
-                                        $mqtt->publishwhenchanged ($topicprefix."electricity/kwh_used_yesterday", $newdata["today"]["kwh_used"],0,1);
-        	                        $mqtt->publishwhenchanged ($topicprefix."electricity/kwh_provided_yesterday", $newdata["today"]["kwh_provided"],0,1);
-	                                $mqtt->publishwhenchanged ($topicprefix."electricity/kwh_yesterday", $newdata["today"]["kwh_total"],0,1);
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/yesterday/kwh_used", $newdata["yesterday"]["kwh_used"],0,1);
+        	                        $mqtt->publishwhenchanged ($topicprefix."electricity/yesterday/kwh_provided", $newdata["yesterday"]["kwh_provided"],0,1);
+	                                $mqtt->publishwhenchanged ($topicprefix."electricity/yesterday/kwh", $newdata["yesterday"]["kwh_total"],0,1);
                                 }
                         }
                         else
@@ -134,6 +134,109 @@ function newvalue($topic, $msg){
                                 echo "error reading electricity values from database ".$mysqli->error."\n";
                         }
 
+                        // Calculate values from this month
+                        if ($result = $mysqli->query("SELECT * FROM `electricitymeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-%m-01') ORDER BY timestamp ASC LIMIT 1"))
+                        {
+                                $row = $result->fetch_object();
+                                //var_dump ($row);
+                                $newdata["month"]["kwh_used1"] = round($mqttdata['home/smartmeter/electricity/kwh_used1'] - $row->kwh_used1,3);
+                                $newdata["month"]["kwh_used2"]  = round($mqttdata['home/smartmeter/electricity/kwh_used2'] - $row->kwh_used2,3);
+                                $newdata["month"]["kwh_provided1"] = round($mqttdata['home/smartmeter/electricity/kwh_provided1'] - $row->kwh_provided1,3);
+                                $newdata["month"]["kwh_provided2"] = round($mqttdata['home/smartmeter/electricity/kwh_provided2'] - $row->kwh_provided2,3);
+                                $newdata["month"]["kwh_used"] = round($newdata["month"]["kwh_used1"] + $newdata["month"]["kwh_used2"],3);
+                                $newdata["month"]["kwh_provided"] = round($newdata["month"]["kwh_provided1"] + $newdata["month"]["kwh_provided2"],3);
+                                $newdata["month"]["kwh_total"] = round($newdata["month"]["kwh_used"] - $newdata["month"]["kwh_provided"],3);
+
+                                $mqtt->publishwhenchanged ($topicprefix."electricity/month/kwh_used", $newdata["month"]["kwh_used"],0,1);
+                                $mqtt->publishwhenchanged ($topicprefix."electricity/month/kwh_provided", $newdata["month"]["kwh_provided"],0,1);
+                                $mqtt->publishwhenchanged ($topicprefix."electricity/month/kwh", $newdata["month"]["kwh_total"],0,1);
+
+                        }
+                        else
+                        {
+                                echo "error reading electricity values from database ".$mysqli->error."\n";
+                        }
+
+                        // Calculate values from previous month
+                        if ($result = $mysqli->query("SELECT * FROM `electricitymeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-%m-01') - INTERVAL 1 MONTH ORDER BY timestamp ASC limit 1"))
+                        {
+                                $row1 = $result->fetch_object();
+                                if ($result = $mysqli->query("SELECT * FROM `electricitymeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-%m-01') ORDER BY timestamp ASC limit 1"))
+                                {
+                                        $row2 = $result->fetch_object();
+                                        //var_dump ($row);
+                                        $newdata["lastmonth"]["kwh_used1"] = round($row2->kwh_used1 - $row1->kwh_used1,3);
+                                        $newdata["lastmonth"]["kwh_used2"]  = round($row2->kwh_used2 - $row1->kwh_used2,3);
+                                        $newdata["lastmonth"]["kwh_provided1"] = round($row2->kwh_provided1 - $row1->kwh_provided1,3);
+                                        $newdata["lastmonth"]["kwh_provided2"] = round($row2->kwh_provided2 - $row1->kwh_provided2,3);
+                                        $newdata["lastmonth"]["kwh_used"] = round($newdata["lastmonth"]["kwh_used1"] + $newdata["lastmonth"]["kwh_used2"],3);
+                                        $newdata["lastmonth"]["kwh_provided"] = round($newdata["lastmonth"]["kwh_provided1"] + $newdata["lastmonth"]["kwh_provided2"],3);
+                                        $newdata["lastmonth"]["kwh_total"] = round($newdata["lastmonth"]["kwh_used"] - $newdata["lastmonth"]["kwh_provided"],3);
+
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/lastmonth/kwh_used", $newdata["lastmonth"]["kwh_used"],0,1);
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/lastmonth/kwh_provided", $newdata["lastmonth"]["kwh_provided"],0,1);
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/lastmonth/kwh", $newdata["lastmonth"]["kwh_total"],0,1);
+                                }
+                        }
+                        else
+                        {
+                                echo "error reading electricity values from database ".$mysqli->error."\n";
+
+                        }
+
+                        // Calculate values from this year
+                        if ($result = $mysqli->query("SELECT * FROM `electricitymeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-01-01') ORDER BY timestamp ASC LIMIT 1"))
+                        {
+                                $row = $result->fetch_object();
+                                //var_dump ($row);
+                                if (isset($row))
+                                {
+                                        $newdata["year"]["kwh_used1"] = round($mqttdata['home/smartmeter/electricity/kwh_used1'] - $row->kwh_used1,3);
+                                        $newdata["year"]["kwh_used2"]  = round($mqttdata['home/smartmeter/electricity/kwh_used2'] - $row->kwh_used2,3);
+                                        $newdata["year"]["kwh_provided1"] = round($mqttdata['home/smartmeter/electricity/kwh_provided1'] - $row->kwh_provided1,3);
+                                        $newdata["year"]["kwh_provided2"] = round($mqttdata['home/smartmeter/electricity/kwh_provided2']  - $row->kwh_provided2,3);
+                                        $newdata["year"]["kwh_used"] = round($newdata["year"]["kwh_used1"] + $newdata["year"]["kwh_used2"],3);
+                                        $newdata["year"]["kwh_provided"] = round($newdata["year"]["kwh_provided1"] + $newdata["year"]["kwh_provided2"],3);
+                                        $newdata["year"]["kwh_total"] = round($newdata["year"]["kwh_used"] - $newdata["year"]["kwh_provided"],3);
+
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/year/kwh_used", $newdata["year"]["kwh_used"],0,1);
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/year/kwh_provided", $newdata["year"]["kwh_provided"],0,1);
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/year/kwh", $newdata["year"]["kwh_total"],0,1);
+                                }
+                        }
+                        else
+                        {
+                                echo "error reading electricity values from database ".$mysqli->error."\n";
+                        }
+
+                        // Calculate values from previous year
+                        if ($result = $mysqli->query("SELECT * FROM `electricitymeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-01-01') - INTERVAL 1 YEAR ORDER BY timestamp ASC LIMIT 1"))
+                        {
+                                $row1 = $result->fetch_object();
+                                if ($result = $mysqli->query("SELECT * FROM `electricitymeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-01-01') ORDER BY timestamp ASC LIMIT 1"))
+                                {
+                                        $row2 = $result->fetch_object();
+                                        //var_dump ($row);
+                                        $newdata["lastyear"]["kwh_used1"] = round($row2->kwh_used1 - $row1->kwh_used1,3);
+                                        $newdata["lastyear"]["kwh_used2"]  = round($row2->kwh_used2 - $row1->kwh_used2,3);
+                                        $newdata["lastyear"]["kwh_provided1"] = round($row2->kwh_provided1 - $row1->kwh_provided1,3);
+                                        $newdata["lastyear"]["kwh_provided2"] = round($row2->kwh_provided2 - $row1->kwh_provided2,3);
+                                        $newdata["lastyear"]["kwh_used"] = round($newdata["lastyear"]["kwh_used1"] + $newdata["lastyear"]["kwh_used2"],3);
+                                        $newdata["lastyear"]["kwh_provided"] = round($newdata["lastyear"]["kwh_provided1"] + $newdata["lastyear"]["kwh_provided2"],3);
+                                        $newdata["lastyear"]["kwh_total"] = round($newdata["lastyear"]["kwh_used"] - $newdata["lastyear"]["kwh_provided"],3);
+                                        
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/lastyear/kwh_used", $newdata["lastyear"]["kwh_used"],0,1);
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/lastyear/kwh_provided", $newdata["lastyear"]["kwh_provided"],0,1);
+                                        $mqtt->publishwhenchanged ($topicprefix."electricity/lastyear/kwh", $newdata["lastyear"]["kwh_total"],0,1);
+                                }
+                        }
+                        else
+                        {
+                                echo "error reading electricity values from database ".$mysqli->error."\n";
+
+                        }
+                        
+                        $mysqli->close();
 		}
 		else
 		{
@@ -200,8 +303,102 @@ function newvalue($topic, $msg){
                                 echo "error reading gas values from database ".$mysqli->error."\n";
                                 $newdata["today"]["m3"] = "";
                         }
-                        $mqtt->publishwhenchanged ($topicprefix."gas/m3_today", $newdata["today"]["m3"],0,1);
+                        $mqtt->publishwhenchanged ($topicprefix."gas/today/m3", $newdata["today"]["m3"],0,1);
+
+
+                        // Calculate values from yesterday
+                        if ($result = $mysqli->query("SELECT * FROM `gasmeter` WHERE timestamp >= CURDATE() - INTERVAL 1 DAY ORDER BY timestamp ASC LIMIT 1"))
+                        {
+                                $row1 = $result->fetch_object();
+                                if ($result = $mysqli->query("SELECT * FROM `gasmeter` WHERE timestamp >= CURDATE() ORDER BY timestamp ASC LIMIT 1"))
+                                {
+                                        $row2 = $result->fetch_object();
+                                        //var_dump ($row);
+                                        $newdata["yesterday"]["m3"] = round($row2->m3 - $row1->m3,3);
+                                }
+                        }
+                        else
+                        {
+                                echo "error reading gas values from database ".$mysqli->error."\n";
+                        }
+                        $mqtt->publishwhenchanged ($topicprefix."gas/yesterday/m3", $newdata["yesterday"]["m3"],0,1);
+
+
+                        // Calculate values from this month
+                        if ($result = $mysqli->query("SELECT * FROM `gasmeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-%m-01') ORDER BY timestamp ASC LIMIT 1"))
+                        {
+                                $row = $result->fetch_object();
+                                //var_dump ($row);
+                                $newdata["month"]["m3"] = round($mqttdata['home/smartmeter/gas/m3'] - $row->m3,3);
+                        }
+                        else
+                        {
+                                echo "error reading gas values from database ".$mysqli->error."\n";
+                        }
+                        $mqtt->publishwhenchanged ($topicprefix."gas/month/m3", $newdata["month"]["m3"],0,1);
+
+
+                        // Calculate values from previous month
+                        if ($result = $mysqli->query("SELECT * FROM `gasmeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-%m-01') - INTERVAL 1 MONTH ORDER BY timestamp ASC LIMIT 1"))
+                        {
+                                $row1 = $result->fetch_object();
+                                if ($result = $mysqli->query("SELECT * FROM `gasmeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-%m-01') ORDER BY timestamp ASC LIMIT 1"))
+                                {
+                                        $row2 = $result->fetch_object();
+                                        //var_dump ($row);
+                                        $newdata["lastmonth"]["m3"] = round($row2->m3 - $row1->m3,3);
+                                }
+                        }
+                        else
+                        {
+                                echo "error reading gas values from database ".$mysqli->error."\n";
+
+                        }
+                        $mqtt->publishwhenchanged ($topicprefix."gas/lastmonth/m3", $newdata["lastmonth"]["m3"],0,1);
+
+
+                        // Calculate values from this year
+                        if ($result = $mysqli->query("SELECT * FROM `gasmeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-01-01') ORDER BY timestamp ASC LIMIT 1"))
+                        {
+                                $row = $result->fetch_object();
+                                //var_dump ($row);
+                                if (isset($row))
+                                {
+                                        $newdata["year"]["m3"] = round($mqttdata['home/smartmeter/gas/m3'] - $row->m3,3);
+                                }
+                        }
+                        else
+                        {
+                                echo "error reading gas values from database ".$mysqli->error."\n";
+                        }
+                        $mqtt->publishwhenchanged ($topicprefix."gas/year/m3", $newdata["year"]["m3"],0,1);
+
+                        // Calculate values from previous year
+                        if ($result = $mysqli->query("SELECT * FROM `gasmeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-01-01') - INTERVAL 1 YEAR ORDER BY timestamp ASC LIMIT 1"))
+                        {
+                                $row1 = $result->fetch_object();
+                                if ($result = $mysqli->query("SELECT * FROM `gasmeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-01-01') ORDER BY timestamp ASC LIMIT 1"))
+                                {
+                                        $row2 = $result->fetch_object();
+                                        //var_dump ($row);
+                                        $newdata["lastyear"]["m3"] = round($row2->m3 - $row1->m3,3);
+                                }
+                        }
+                        else
+                        {
+                                echo "error reading gas values from database ".$mysqli->error."\n";
+
+                        }
+                        $mqtt->publishwhenchanged ($topicprefix."gas/lastyear/m3", $newdata["lastyear"]["m3"],0,1);
+
+                        $mysqli->close();
+
 	        }
+                else
+                {
+                        echo "Connection to myqsl failed!\n";
+                }
+
         }
 
 }

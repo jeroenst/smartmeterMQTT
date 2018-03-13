@@ -12,7 +12,7 @@ $server = "192.168.2.1";     // change if necessary
 $port = 1883;                     // change if necessary
 $username = "";                   // set your username
 $password = "";                   // set your password
-$client_id = uniqid("ducobox_");; // make sure this is unique for connecting to sever - you could use uniqid()
+$client_id = uniqid("smartmeter_"); // make sure this is unique for connecting to sever - you could use uniqid()
 echo ("Smartmeter MQTT publisher started...\n"); 
 $mqttTopicPrefix = "home/smartmeter/";
 $iniarray = parse_ini_file("smartmeterMQTT.ini",true);
@@ -27,10 +27,10 @@ $mqtt = new phpMQTT($server, $port, $client_id);
 
 
 $will = array (
-	["topic"] => $mqttTopicPrefix."status",
-	["content"] => "offline",
-	["qos"] => 0,
-	["retain"] => 1
+	"topic" => $mqttTopicPrefix."status",
+	"content" => "offline",
+	"qos" => 0,
+	"retain" => 1
 );
 
 $mqtt->connect(true, $will, $username, $password);
@@ -101,6 +101,9 @@ while(1)
 					if ((strpos($line, "!") !== false) && (strpos($receivedpacket, "!") == 0))
 					{
 						publishmqtt("electricity/watt", ($mqttdata["electricity/kw_using"] - $mqttdata["electricity/kw_providing"])*1000);
+						publishmqtt("electricity/kwh_used", $mqttdata["electricity/kwh_used1"] + $mqttdata["electricity/kwh_used2"]);
+						publishmqtt("electricity/kwh_provided", $mqttdata["electricity/kwh_provided1"] + $mqttdata["electricity/kwh_provided2"]);
+						publishmqtt("electricity/kwh", $mqttdata["electricity/kwh_used"] - $mqttdata["electricity/kwh_provided"]);
 						publishmqtt("status","ready");
 					}
 					if ((strpos($line, "/") !== false) && (strpos($receivedpacket, "/") == 0))
