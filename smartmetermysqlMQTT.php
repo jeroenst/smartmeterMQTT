@@ -18,6 +18,13 @@ $settings = array(
 "mysqldatabase" => "casaan");
 
 
+$iniarray = parse_ini_file("smartmeterMQTT.ini",true);
+if (($tmp = $iniarray["smartmeter"]["mqttserver"]) != "") $server = $tmp;
+if (($tmp = $iniarray["smartmeter"]["mqttport"]) != "") $tcpport = $tmp;
+if (($tmp = $iniarray["smartmeter"]["mqttusername"]) != "") $username = $tmp;
+if (($tmp = $iniarray["smartmeter"]["mqttpassword"]) != "") $password = $tmp;
+
+
 $mqttdata = array();
 
 $mqtt = new phpMQTT($server, $port, $client_id);
@@ -109,6 +116,7 @@ function newvalue($topic, $msg){
                         }
                         
                         
+                        
                         // Calculate values from yesterday
                         if ($result = $mysqli->query("SELECT * FROM `electricitymeter` WHERE timestamp >= CURDATE() - INTERVAL 1 DAY ORDER BY timestamp ASC LIMIT 1"))
                         {
@@ -156,6 +164,8 @@ function newvalue($topic, $msg){
                         {
                                 echo "error reading electricity values from database ".$mysqli->error."\n";
                         }
+
+
 
                         // Calculate values from previous month
                         if ($result = $mysqli->query("SELECT * FROM `electricitymeter` WHERE timestamp >= DATE_FORMAT(NOW() ,'%Y-%m-01') - INTERVAL 1 MONTH ORDER BY timestamp ASC limit 1"))
@@ -235,6 +245,115 @@ function newvalue($topic, $msg){
                                 echo "error reading electricity values from database ".$mysqli->error."\n";
 
                         }
+
+                        // Creating day graph data
+                        $daykwharray = array();
+                        $kwhhour = null;
+                        $kwhprevhour = null;
+                        $hour = 24;
+                        while ($hour >= 0)
+                        {
+//                                if ($result = $mysqli->query("SELECT *, DATE(timestamp) as date FROM `electricitymeter` WHERE timestamp BETWEEN DATE(NOW()) - INTERVAL ".
+//                                                              $day." DAY AND DATE(NOW()) - INTERVAL ".$day." DAY + INTERVAL 1 HOUR GROUP BY date ORDER BY `electricitymeter`.`timestamp`"))
+                                if ($result = $mysqli->query("
+                                        SELECT *, DATE(timestamp) as date, HOUR(timestamp) as hour
+                                        FROM `electricitymeter` 
+                                        WHERE timestamp > FROM_UNIXTIME(unix_timestamp(now()) - SECOND(now()) - (MINUTE(now())*60)) - INTERVAL ".$hour." HOUR 
+                                        AND timestamp < FROM_UNIXTIME(unix_timestamp(now()) - SECOND(now()) - (MINUTE(now())*60)) - INTERVAL ".($hour - 1)." HOUR 
+                                        ORDER BY `electricitymeter`.`timestamp` DESC LIMIT 1"))
+                                {
+                                        $row = $result->fetch_object();
+                                        if ($row) 
+                                        {
+                                                $kwhhour = $row->kwh_used1 + $row->kwh_used2 - $row->kwh_provided1 - $row->kwh_provided2;
+                                                if ($kwhprevhour != null)
+                                                {
+                                                        $daykwharray[$row->date." ".$row->hour.":00"]  = round($kwhhour - $kwhprevhour,3);
+                                                }
+                                                $kwhprevhour = $kwhhour;
+                                        }
+                                        else 
+                                        {
+                                                $kwprevhour = null;
+                                        }
+                                        
+                                }
+                                else
+                                {
+                                        $kwhprevhour = null;
+                                        echo "error reading electricity values from database ".$mysqli->error."\n";
+                                }
+                                $hour--;
+                        }
+                        $mqtt->publishwhenchanged ($topicprefix."electricity/day/graph/kwh", json_encode($daykwharray), 0, 1);
+
+
+
+                        // Creating month graph data
+                        $monthkwharray = array();
+                        $kwhtoday = null;
+                        $kwhyesterday = null;
+                        $day = 31;
+                        while ($day >= 0)
+                        {
+//                                if ($result = $mysqli->query("SELECT *, DATE(timestamp) as date FROM `electricitymeter` WHERE timestamp BETWEEN DATE(NOW()) - INTERVAL ".
+//                                                              $day." DAY AND DATE(NOW()) - INTERVAL ".$day." DAY + INTERVAL 1 HOUR GROUP BY date ORDER BY `electricitymeter`.`timestamp`"))
+                                if ($result = $mysqli->query("SELECT *, DATE(timestamp) as date FROM `electricitymeter` WHERE timestamp BETWEEN DATE(NOW()) - INTERVAL ".$day." DAY AND DATE(NOW()) - INTERVAL ".$day." DAY + INTERVAL 24 HOUR ORDER BY `electricitymeter`.`timestamp` DESC LIMIT 1"))
+                                {
+                                        $row = $result->fetch_object();
+                                        if ($row) 
+                                        {
+                                                $kwhtoday = $row->kwh_used1 + $row->kwh_used2 - $row->kwh_provided1 - $row->kwh_provided2;
+                                                if ($kwhyesterday != null)
+                                                {
+                                                        $monthkwharray[$row->date]  = round($kwhtoday - $kwhyesterday, 3);
+                                                }
+                                                $kwhyesterday = $kwhtoday;
+                                        }
+                                        else $kwhyesterday = null;
+                                        
+                                }
+                                else
+                                {
+                                        $kwhyesterday = null;
+                                        echo "error reading electricity values from database ".$mysqli->error."\n";
+                                }
+                                $day--;
+                        }
+                        $mqtt->publishwhenchanged ($topicprefix."electricity/month/graph/kwh", json_encode($monthkwharray), 0, 1);
+
+
+                        // Creating year graph data
+                        $yearkwharray = array();
+                        $kwhweek = null;
+                        $kwhprevweek = null;
+                        $week = 52;
+                        while ($week >= 0)
+                        {
+                                if ($result = $mysqli->query("SELECT *, YEAR(timestamp) as year, WEEK(timestamp,3 ) as week FROM `electricitymeter` WHERE timestamp BETWEEN DATE(NOW()) - INTERVAL ".$week." WEEK AND DATE(NOW()) - INTERVAL ".$week." WEEK + INTERVAL 24 HOUR ORDER BY `electricitymeter`.`timestamp` DESC LIMIT 1"))
+                                {
+                                        $row = $result->fetch_object();
+                                        if ($row) 
+                                        {
+                                                $kwhweek = $row->kwh_used1 + $row->kwh_used2 - $row->kwh_provided1 - $row->kwh_provided2;
+                                                if ($kwhprevweek != null)
+                                                {
+                                                        $yearkwharray[$row->year."-".$row->week]  = round($kwhweek - $kwhprevweek, 3);
+                                                }
+                                                $kwhprevweek = $kwhweek;
+                                        }
+                                        else $kwhprevweek = null;
+                                        
+                                }
+                                else
+                                {
+                                        $kwhprevweek = null;
+                                        echo "error reading electricity values from database ".$mysqli->error."\n";
+                                }
+                                $week--;
+                        }
+                        $mqtt->publishwhenchanged ($topicprefix."electricity/year/graph/kwh", json_encode($yearkwharray), 0, 1);
+
                         
                         $mysqli->close();
 		}
